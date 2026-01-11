@@ -1,0 +1,22 @@
+# --- Deep Learning & Computer Vision ---
+torch
+torchvision
+torchaudio
+ultralytics
+opencv-python
+Pillow
+
+# --- Machine Learning & Data Science ---
+numpy
+scikit-learn
+matplotlib
+seaborn
+
+# --- Communication & Asynchronous ---
+websockets
+ollama
+asyncio
+
+# --- Utilities ---
+tqdm
+PyYAML
