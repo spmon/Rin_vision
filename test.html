@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waifu AI - Ngrok Client (Upload Version)</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background-color: #1a1a1a; 
+            color: white; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            margin: 0; 
+        }
+        
+        /* Màn hình Video */
+        .video-container { 
+            position: relative; 
+            border: 2px solid #333; 
+            border-radius: 12px; 
+            overflow: hidden; 
+            width: 95%; 
+            max-width: 640px; 
+            aspect-ratio: 4/3; 
+            background: #000; 
+            display: none; /* Ẩn lúc đầu */ 
+        }
+        video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        
+        /* Overlay kết quả */
+        .overlay { position: absolute; padding: 5px 10px; border-radius: 4px; font-weight: bold; pointer-events: none; font-size: 14px; }
+        #action-box { top: 10px; left: 10px; background-color: rgba(0, 255, 0, 0.8); color: black; }
+        #object-box { top: 40px; left: 10px; background-color: rgba(255, 165, 0, 0.8); color: black; max-width: 80%; }
+        #vision-result { bottom: 10px; left: 10px; right: 10px; background-color: rgba(0, 0, 0, 0.7); color: #ffd700; text-align: center; padding: 8px; border: 1px solid #555; }
+        
+        /* Khu vực Chat/Hỏi đáp */
+        .controls { margin-top: 15px; display: flex; gap: 5px; width: 95%; max-width: 640px; display: none; align-items: center; }
+        input[type="text"] { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; }
+        
+        /* Nút bấm chung */
+        button { padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white;}
+        
+        /* Nút Gửi */
+        #btn-send { background-color: #007bff; min-width: 60px; }
+        #btn-send:disabled { background-color: #555; cursor: not-allowed; }
+
+        /* Nút Upload */
+        #btn-upload { background-color: #444; font-size: 18px; padding: 8px 15px; }
+        #btn-upload:hover { background-color: #666; }
+
+        /* Thông báo file đang chọn */
+        #file-status {
+            width: 95%; max-width: 640px; font-size: 12px; color: #0f0; margin-top: 5px; display: none;
+        }
+        
+        /* Màn hình Chào (Start Screen) */
+        #start-screen { display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+        #btn-start { 
+            padding: 15px 40px; 
+            font-size: 20px; 
+            background: linear-gradient(45deg, #28a745, #218838); 
+            border-radius: 50px; 
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.5); 
+            transition: transform 0.2s;
+        }
+        #btn-start:active { transform: scale(0.95); }
+        
+        #status { margin-top: 10px; color: #888; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen">
+        <h2>AI Waifu Client (Ngrok)</h2>
+        <p style="color: #aaa; font-size: 14px;">Nhấn nút dưới để cấp quyền Camera</p>
+        <button id="btn-start" onclick="startApp()">🚀 KẾT NỐI NGAY</button>
+    </div>
+
+    <div class="video-container" id="main-ui">
+        <video id="videoElement" autoplay playsinline muted></video>
+        <div id="action-box" class="overlay">Action: Waiting...</div>
+        <div id="object-box" class="overlay">Objects: None</div>
+        <div id="vision-result" class="overlay">Sẵn sàng...</div>
+    </div>
+
+    <div id="file-status">📷 Đã chọn ảnh: <span id="filename"></span> <a href="#" onclick="clearFile()" style="color:red; text-decoration:none;">(Xóa)</a></div>
+
+    <div class="controls" id="ctrl-ui">
+        <input type="file" id="file-input" accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
+        
+        <button id="btn-upload" onclick="document.getElementById('file-input').click()" title="Gửi ảnh từ máy">📁</button>
+        
+        <input type="text" id="qa-input" placeholder="Hỏi AI (VD: Cái này là gì?)..." onkeypress="handleEnter(event)">
+        <button id="btn-send" onclick="sendVisionRequest()">Gửi</button>
+    </div>
+
+    <div id="status">Chưa kết nối...</div>
+    
+    <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
+
+    <script>
+        // =================================================================
+        // 👇 THAY LINK NGROK CỦA BẠN VÀO ĐÂY (Nhớ là wss://)
+        // =================================================================
+        const WS_URL = "wss://localhost:8080/"; 
+        // =================================================================
+
+        let ws;
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusDiv = document.getElementById('status');
+        const inputQA = document.getElementById('qa-input');
+        const visionBox = document.getElementById('vision-result');
+        const btnSend = document.getElementById('btn-send');
+        const fileInput = document.getElementById('file-input');
+        const fileStatus = document.getElementById('file-status');
+        const fileNameSpan = document.getElementById('filename');
+
+        // Hàm chạy khi bấm nút Start
+        function startApp() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('main-ui').style.display = 'block';
+            document.getElementById('ctrl-ui').style.display = 'flex';
+            
+            statusDiv.innerText = "Đang xin quyền Camera...";
+
+            navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'user' }, 
+                audio: false 
+            })
+            .then(stream => {
+                video.srcObject = stream;
+                statusDiv.innerText = "Camera OK! Đang kết nối Server...";
+                connectWebSocket(); 
+            })
+            .catch(err => {
+                alert("Không thể mở Camera: " + err.message);
+                statusDiv.innerText = "❌ Lỗi Camera (Hãy kiểm tra quyền)";
+                document.getElementById('start-screen').style.display = 'flex';
+                document.getElementById('main-ui').style.display = 'none';
+            });
+        }
+
+        function connectWebSocket() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                statusDiv.innerText = "✅ Đã kết nối Server!";
+                statusDiv.style.color = "#0f0";
+                setInterval(sendStreamFrame, 100);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === "action_result") {
+                        document.getElementById('action-box').innerText = 
+                            `${data.action} (${(data.action_confidence*100).toFixed(0)}%)`;
+                        
+                        if (data.objects && data.objects.length > 0) {
+                             const names = data.objects.map(o => o.name).join(", ");
+                             document.getElementById('object-box').innerText = names;
+                        } else {
+                            document.getElementById('object-box').innerText = "Objects: None";
+                        }
+                    } 
+                    else if (data.type === "caption_result") {
+                        visionBox.innerText = (data.is_answer ? "Trả lời: " : "Mô tả: ") + data.text;
+                        // Reset lại giao diện sau khi nhận câu trả lời
+                        btnSend.disabled = false; 
+                        inputQA.disabled = false; 
+                        inputQA.focus();
+                    }
+                } catch (e) { }
+            };
+
+            ws.onerror = (err) => {
+                statusDiv.innerText = "⚠️ Lỗi kết nối Socket";
+            };
+
+            ws.onclose = () => {
+                statusDiv.innerText = "❌ Mất kết nối. Thử lại sau 2s...";
+                statusDiv.style.color = "red";
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+
+        function sendStreamFrame() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                let base64 = canvas.toDataURL('image/jpeg', 0.5);
+                ws.send(base64);
+            }
+        }
+
+        // --- Xử lý chọn file ---
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                fileStatus.style.display = "block";
+                fileNameSpan.innerText = file.name;
+                inputQA.focus(); // Nhảy vào ô chat luôn cho tiện
+            }
+        }
+
+        function clearFile() {
+            fileInput.value = ""; // Xóa input
+            fileStatus.style.display = "none";
+        }
+
+        // --- Hàm gửi yêu cầu (Đã sửa để hỗ trợ file upload) ---
+        function sendVisionRequest() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const question = inputQA.value.trim();
+                visionBox.innerText = "AI đang suy nghĩ...";
+                btnSend.disabled = true;
+
+                // TRƯỜNG HỢP 1: Gửi file ảnh từ máy
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    const reader = new FileReader();
+
+                    reader.onload = function(e) {
+                        // Lấy base64 từ file
+                        let rawBase64 = e.target.result.split(',')[1];
+                        
+                        // Gửi đi
+                        if (question === "") {
+                            ws.send("CAPTION," + rawBase64);
+                        } else {
+                            ws.send("QA," + rawBase64 + "," + question);
+                        }
+
+                        // Xóa file sau khi gửi xong (tùy chọn, ở đây tôi xóa để lần sau lại dùng camera)
+                        clearFile();
+                    };
+                    reader.readAsDataURL(file);
+                } 
+                // TRƯỜNG HỢP 2: Chụp từ Camera (Nếu không chọn file)
+                else {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    let rawBase64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+                    
+                    if (question === "") {
+                        ws.send("CAPTION," + rawBase64);
+                    } else {
+                        ws.send("QA," + rawBase64 + "," + question);
+                    }
+                }
+            }
+        }
+
+        function handleEnter(e) { 
+            if (e.key === 'Enter') sendVisionRequest(); 
+        }
+    </script>
+</body>
+</html>
