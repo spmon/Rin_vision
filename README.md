@@ -62,6 +62,7 @@ pip install -r requirements.txt
 
 # Khởi chạy Vision
 python vision_server.py
+và chạy file test.html để test nhanh kết quả đạt được
 
 🔗 Credits & Open Source
 Emotion Module: Dựa trên kiến trúc của [ https://github.com/anhtuan85/Facial-expression-recognition?tab=readme-ov-file ] và được nhóm tùy chỉnh để tích hợp vào hệ thống Rin AI.
