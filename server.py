@@ -6,7 +6,7 @@ import asyncio
 import websockets
 import base64
 import time
-import vision_module  # Module BLIP
+import vision_module  
 import threading      # Để chạy đa luồng
 import config
 from model_loader import load_all_models
@@ -60,7 +60,7 @@ async def handler(websocket):
     current_action = "Waiting..."
     confidence = 0.0
     
-    # HARDCODE CẢM XÚC: Để "lừa" bên Client là mọi thứ vẫn ổn
+    
     current_emotion = "Neutral"
     
     detected_objects_list = []
@@ -107,7 +107,7 @@ async def handler(websocket):
                     # Bỏ qua xử lý Action cho frame này để tiết kiệm tài nguyên
                     continue 
 
-                # --- TRƯỜNG HỢP 2: LUỒNG ACTION BÌNH THƯỜNG (STREAM) ---
+                # --- TRƯỜNG HỢP 2: LUỒNG ACTION  (STREAM) ---
                 # Giải mã ảnh cho luồng stream
                 img_bytes = base64.b64decode(data)
                 img_jpg = np.frombuffer(img_bytes, dtype=np.uint8)
@@ -164,7 +164,7 @@ async def handler(websocket):
                     "type": "action_result",
                     "action": final_action,
                     "action_confidence": round(final_confidence, 4),
-                    "emotion": current_emotion, # Luôn là "Neutral"
+                    "emotion": current_emotion, 
                     "objects": detected_objects_list
                 }
                 json_output = json.dumps(response_data)
