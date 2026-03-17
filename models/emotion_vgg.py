@@ -1,6 +1,3 @@
-# models/emotion_vgg.py
-# (Hãy chép nội dung file vgg.py của bạn vào đây)
-# Dưới đây là một class VGG ví dụ tương thích với code của bạn:
 
 import torch
 import torch.nn as nn

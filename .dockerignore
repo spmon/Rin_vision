@@ -1,0 +1,12 @@
+.venv/
+venv/
+env/
+__pycache__/
+*.mp4
+*.avi
+*.jpg
+*.png
+*.pt
+*.weights
+train_and_test/
+.git/

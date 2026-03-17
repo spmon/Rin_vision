@@ -1,54 +1,50 @@
-import ollama
+from ollama import Client # Dùng Client thay vì gọi ollama trực tiếp
 import cv2
 import numpy as np
 
 # --- CẤU HÌNH ---
-# Tên model chính xác như trong ảnh bạn gửi
 MODEL_NAME = 'qwen3-vl:2b-instruct' 
+# Địa chỉ trỏ từ Docker ra máy chủ Windows (nơi đang bật app Ollama ở taskbar)
+OLLAMA_HOST = 'http://host.docker.internal:11434' 
+
+# Khởi tạo client
+client = Client(host=OLLAMA_HOST)
 
 def load_model():
     """
-    Kiểm tra kết nối với Ollama.
+    Kiểm tra kết nối với Ollama qua môi trường Docker.
     """
     try:
-        # 1. Ping thử Ollama xem có sống không
-        models_info = ollama.list()
-        
-        # 2. In ra để debug (xem nó trả về cái gì)
-        # print(f"DEBUG Ollama: {models_info}") 
-        
-        # Thay vì loop check gây lỗi, ta chỉ cần thông báo kết nối thành công
-        # Vì bạn đã pull model rồi nên cứ tin tưởng là nó có ở đó.
-        print(f">>> [Vision Module] Đã kết nối Ollama thành công! (Mode: {MODEL_NAME})")
+        # Dùng client thay vì ollama
+        models_info = client.list() 
+        print(f">>> [Vision Module] Đã kết nối Ollama thành công tại {OLLAMA_HOST}! (Mode: {MODEL_NAME})")
         return True
 
     except Exception as e:
-        # Nếu lỗi này hiện ra nghĩa là Ollama chưa bật hoặc chưa cài
         print(f">>> [Vision Module] LỖI KẾT NỐI OLLAMA: {e}")
-        print(">>> HÃY BẬT ỨNG DỤNG OLLAMA Ở THANH TASKBAR LÊN!")
+        print(">>> HÃY KIỂM TRA: 1. Đã bật Ollama ở Taskbar chưa? 2. Mạng Docker có chặn host.docker.internal không?")
         return False
 
 def generate_analysis(frame_cv2, user_question=None):
     """
-    Gửi ảnh sang Ollama (Qwen3-VL) để phân tích.
+    Gửi ảnh sang Ollama (Qwen-VL) để phân tích.
     """
     try:
-        # 1. Chuyển ảnh OpenCV (numpy) -> Bytes (JPG)
         is_success, buffer = cv2.imencode(".jpg", frame_cv2)
         if not is_success:
             return "Lỗi mã hóa ảnh."
         
         image_bytes = buffer.tobytes()
 
-        # 2. Tạo Prompt
         if user_question:
-            prompt = user_question+" nói ngắn gọn về những gì bạn thấy trong ảnh này."
+            prompt = user_question + " nói ngắn gọn về những gì bạn thấy trong ảnh này."
             print("User question:", user_question)
         else:
             prompt = "hãy mô tả ngắn gọn những gì bạn thấy trong ảnh này."
             print("No user question provided, using default prompt.")
-        # 3. Gọi API Ollama
-        response = ollama.chat(
+            
+        # Gọi API thông qua đối tượng client
+        response = client.chat(
             model=MODEL_NAME,
             keep_alive=-1,
             messages=[{
@@ -56,14 +52,12 @@ def generate_analysis(frame_cv2, user_question=None):
                 'content': prompt,
                 'images': [image_bytes] 
             }],
-
-        options={
-                "num_ctx": 1024,  # Mặc định là 2048 hoặc 4096. Giảm xuống 1024 hoặc 512.
-                "temperature": 0.1 # Độ sáng tạo (giữ nguyên cũng được)
+            options={
+                "num_ctx": 1024,  # Hạ xuống 1024 là rất hợp lý để tránh ăn RAM
+                "temperature": 0.1
             }
         )
 
-        # 4. Lấy kết quả
         return response['message']['content']
 
     except Exception as e:
